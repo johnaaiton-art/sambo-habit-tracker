@@ -395,6 +395,7 @@ async def habit_5(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     """Main function to run the bot"""
     try:
+	print("Deployment triggered on " + str(datetime.datetime.now()))
         # Initialize bot
         bot = SamboBot()
         logger.info("SamboBot initialized successfully")
