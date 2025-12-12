@@ -37,6 +37,7 @@ class SamboBot:
                 
             creds_dict = json.loads(creds_json)
             
+            # FIXED: Removed trailing spaces in scope
             credentials = Credentials.from_service_account_info(
                 creds_dict,
                 scopes=['https://www.googleapis.com/auth/spreadsheets']
@@ -150,7 +151,7 @@ class SamboBot:
                 self.consumption_sheet.update_cell(1, len(headers) + 1, config['count_col'])
                 count_col_index = len(headers) + 1
             try:
-                cost_col_index = headers.index(config['cost_col']) + 1
+                cost_col_index = handlers.index(config['cost_col']) + 1
             except ValueError:
                 self.consumption_sheet.update_cell(1, len(headers) + 2, config['cost_col'])
                 cost_col_index = len(headers) + 2
@@ -259,19 +260,21 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bot = context.bot_data["sambo_bot"]
-    user_id = str(update.effective_user.id)
-    text = update.message.text.strip().lower()
+    user_id = update.effective_user.id  # This is an INTEGER
     
-    if user_id != bot.user_id:
+    # Convert bot.user_id to int for comparison
+    if user_id != int(bot.user_id):
         await update.message.reply_text("Sorry, this bot is for authorized users only.")
         return
+    
+    text = update.message.text.strip().lower()
     
     if text in ['ch', 'he', 'ta']:
         success, message = bot.record_language(user_id, text)
         await update.message.reply_text(message)
         return
     
-    if text[0] in ['x', 'y', 'z']:
+    if text and text[0] in ['x', 'y', 'z']:
         success, message = bot.record_consumption(user_id, text)
         await update.message.reply_text(message)
         return
@@ -280,10 +283,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_activity(update: Update, context: ContextTypes.DEFAULT_TYPE, habit_id: int):
     bot = context.bot_data["sambo_bot"]
-    user_id = str(update.effective_user.id)
-    if user_id != bot.user_id:
+    user_id = update.effective_user.id  # This is an INTEGER
+    
+    # Convert bot.user_id to int for comparison
+    if user_id != int(bot.user_id):
         await update.message.reply_text("Sorry, this bot is for authorized users only.")
         return
+    
     success, message = bot.record_activity(user_id, habit_id)
     await update.message.reply_text(message)
 
@@ -303,88 +309,61 @@ async def habit_5(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await handle_activity(update, context, 5)
 
 
-# ========== Global bot instance for caching ==========
-_bot_instance = None
-
-def get_bot_instance():
-    """Get or create singleton bot instance"""
-    global _bot_instance
-    if _bot_instance is None:
-        logger.info("Creating new SamboBot instance")
-        _bot_instance = SamboBot()
-    else:
-        logger.debug("Using cached SamboBot instance")
-    return _bot_instance
-
-
-# ========== YANDEX SERVERLESS CONTAINER ENTRY POINT ==========
-async def process_telegram_update(event):
-    """Process a single Telegram update"""
-    # Validate JSON format
-    try:
-        update_data = json.loads(event['body'])
-    except (json.JSONDecodeError, KeyError) as e:
-        logger.error(f"Invalid request format: {e}")
-        raise
-    
-    bot = get_bot_instance()
-    
-    # Build application
-    application = ApplicationBuilder().token(bot.bot_token).build()
-    application.bot_data["sambo_bot"] = bot
-    
-    # Register handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("1", habit_1))
-    application.add_handler(CommandHandler("2", habit_2))
-    application.add_handler(CommandHandler("3", habit_3))
-    application.add_handler(CommandHandler("4", habit_4))
-    application.add_handler(CommandHandler("5", habit_5))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
-    # Parse and process update
-    update = Update.de_json(update_data, application.bot)
-    
-    # Initialize application
-    await application.initialize()
-    await application.process_update(update)
-    await application.shutdown()
-
-
+# ========== YANDEX SERVERLESS CONTAINER WEBHOOK HANDLER ==========
 def handler(event, context):
     """
     Yandex Cloud Serverless Container webhook handler.
     Receives Telegram updates via HTTP POST and processes them.
     """
     import asyncio
-    import time
     
-    start_time = time.time()
-    
-    # Validate request format
+    # Validate request has body
     if 'body' not in event:
         logger.warning("Received event without body")
-        return {
-            'statusCode': 400,
-            'body': json.dumps({'status': 'error', 'message': 'Invalid request format'})
-        }
+        return {'statusCode': 400, 'body': ''}
     
     try:
-        # Run async update processing
-        asyncio.run(process_telegram_update(event))
+        # Parse Telegram update
+        update_data = json.loads(event['body'])
         
-        elapsed = time.time() - start_time
-        logger.info(f"Request processed successfully in {elapsed:.3f} seconds")
+        async def process_update():
+            # Create bot instance
+            bot = SamboBot()
+            
+            # Build and initialize Telegram Application
+            app = ApplicationBuilder().token(bot.bot_token).build()
+            app.bot_data["sambo_bot"] = bot
+
+            # Register all handlers
+            app.add_handler(CommandHandler("start", start))
+            app.add_handler(CommandHandler("help", help_command))
+            app.add_handler(CommandHandler("1", habit_1))
+            app.add_handler(CommandHandler("2", habit_2))
+            app.add_handler(CommandHandler("3", habit_3))
+            app.add_handler(CommandHandler("4", habit_4))
+            app.add_handler(CommandHandler("5", habit_5))
+            app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+            # Initialize the application
+            await app.initialize()
+            
+            try:
+                # Parse and process the update
+                update = Update.de_json(update_data, app.bot)
+                await app.process_update(update)
+            finally:
+                # Always shutdown even if error occurs
+                await app.shutdown()
+
+        # Run async processing
+        asyncio.run(process_update())
         
-        return {
-            'statusCode': 200,
-            'body': json.dumps({'status': 'ok'})
-        }
+        logger.info("Telegram update processed successfully")
+        return {'statusCode': 200, 'body': ''}
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON in webhook request: {e}")
+        return {'statusCode': 400, 'body': ''}
     except Exception as e:
-        elapsed = time.time() - start_time
-        logger.error(f"Webhook error after {elapsed:.3f}s: {e}", exc_info=True)
-        return {
-            'statusCode': 500,
-            'body': json.dumps({'status': 'error', 'message': str(e)})
-        }
+        logger.error(f"Webhook error: {e}", exc_info=True)
+        return {'statusCode': 500, 'body': ''}
