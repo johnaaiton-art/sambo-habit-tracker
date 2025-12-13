@@ -2,31 +2,30 @@ import os
 import json
 import datetime
 import logging
-from aiohttp import web
 import gspread
+import asyncio
 from google.oauth2.service_account import Credentials
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-# Configure logging - MORE VERBOSE
+# Configure logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.DEBUG  # Changed to DEBUG for more info
+    level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
 # Moscow timezone
 MOSCOW_TZ = datetime.timezone(datetime.timedelta(hours=3))
 
+# Global bot instance
+bot_instance = None
+
 class SamboBot:
     def __init__(self):
         self.bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
         self.sheet_id = os.getenv("GOOGLE_SHEET_ID")
         self.user_id = os.getenv("TELEGRAM_USER_ID")
-        
-        logger.info(f"Initializing bot with token: {self.bot_token[:10]}...")
-        logger.info(f"Sheet ID: {self.sheet_id}")
-        logger.info(f"User ID: {self.user_id}")
         
         if not self.bot_token:
             raise ValueError("TELEGRAM_BOT_TOKEN not set")
@@ -155,7 +154,7 @@ class SamboBot:
                 self.consumption_sheet.update_cell(1, len(headers) + 1, config['count_col'])
                 count_col_index = len(headers) + 1
             try:
-                cost_col_index = headers.index(config['cost_col']) + 1
+                cost_col_index = headers.index(config['cost_col']) + 1  # FIXED: was 'handlers'
             except ValueError:
                 self.consumption_sheet.update_cell(1, len(headers) + 2, config['cost_col'])
                 cost_col_index = len(headers) + 2
@@ -263,36 +262,43 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await start(update, context)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    bot = context.bot_data["sambo_bot"]
+    global bot_instance
+    if not bot_instance:
+        bot_instance = SamboBot()
+    
     user_id = update.effective_user.id
     
-    if user_id != int(bot.user_id):
+    # Convert bot.user_id to int for comparison
+    if str(user_id) != bot_instance.user_id:
         await update.message.reply_text("Sorry, this bot is for authorized users only.")
         return
     
     text = update.message.text.strip().lower()
     
     if text in ['ch', 'he', 'ta']:
-        success, message = bot.record_language(user_id, text)
+        success, message = bot_instance.record_language(user_id, text)
         await update.message.reply_text(message)
         return
     
     if text and text[0] in ['x', 'y', 'z']:
-        success, message = bot.record_consumption(user_id, text)
+        success, message = bot_instance.record_consumption(user_id, text)
         await update.message.reply_text(message)
         return
     
     await update.message.reply_text("Unknown command. Type /help for instructions.")
 
 async def handle_activity(update: Update, context: ContextTypes.DEFAULT_TYPE, habit_id: int):
-    bot = context.bot_data["sambo_bot"]
+    global bot_instance
+    if not bot_instance:
+        bot_instance = SamboBot()
+    
     user_id = update.effective_user.id
     
-    if user_id != int(bot.user_id):
+    if str(user_id) != bot_instance.user_id:
         await update.message.reply_text("Sorry, this bot is for authorized users only.")
         return
     
-    success, message = bot.record_activity(user_id, habit_id)
+    success, message = bot_instance.record_activity(user_id, habit_id)
     await update.message.reply_text(message)
 
 async def habit_1(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -311,89 +317,92 @@ async def habit_5(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await handle_activity(update, context, 5)
 
 
-# ========== GLOBAL BOT INSTANCE ==========
-# Initialize ONCE at module level, not per request
-logger.info("Creating global bot instance...")
-sambo_bot = SamboBot()
-app = ApplicationBuilder().token(sambo_bot.bot_token).build()
-app.bot_data["sambo_bot"] = sambo_bot
+# ========== Initialize Application ==========
+def init_application():
+    """Initialize Telegram application once"""
+    global bot_instance
+    bot_instance = SamboBot()
+    
+    # Build application
+    application = Application.builder().token(bot_instance.bot_token).build()
+    
+    # Store bot instance in bot_data for handlers to access
+    application.bot_data["sambo_bot"] = bot_instance
+    
+    # Register handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("1", habit_1))
+    application.add_handler(CommandHandler("2", habit_2))
+    application.add_handler(CommandHandler("3", habit_3))
+    application.add_handler(CommandHandler("4", habit_4))
+    application.add_handler(CommandHandler("5", habit_5))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    
+    return application
 
-# Register all handlers
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("help", help_command))
-app.add_handler(CommandHandler("1", habit_1))
-app.add_handler(CommandHandler("2", habit_2))
-app.add_handler(CommandHandler("3", habit_3))
-app.add_handler(CommandHandler("4", habit_4))
-app.add_handler(CommandHandler("5", habit_5))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-logger.info("Bot handlers registered")
+# ========== YANDEX SERVERLESS CONTAINER WEBHOOK HANDLER ==========
+# Global application instance
+app = None
 
-
-# ========== WEBHOOK HTTP SERVER ==========
-async def webhook_handler(request):
-    """Handle incoming webhook POST requests from Telegram"""
-    try:
-        logger.info("=" * 60)
-        logger.info("WEBHOOK REQUEST RECEIVED")
-        logger.info(f"Method: {request.method}")
-        logger.info(f"Path: {request.path}")
-        logger.info(f"Headers: {dict(request.headers)}")
-        
-        # Read raw body
-        raw_body = await request.read()
-        logger.info(f"Raw body (first 500 chars): {raw_body[:500]}")
-        
-        # Parse JSON
-        try:
-            update_data = json.loads(raw_body)
-            logger.info(f"Parsed JSON successfully: {json.dumps(update_data, indent=2)[:500]}")
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON decode error: {e}")
-            return web.Response(text="Invalid JSON", status=400)
-        
-        # Check if this is a valid Telegram update
-        if 'update_id' not in update_data:
-            logger.error(f"No update_id in request. Keys present: {list(update_data.keys())}")
-            return web.Response(text="Not a Telegram update", status=400)
-        
-        # Convert to Telegram Update object
-        update = Update.de_json(update_data, app.bot)
-        logger.info(f"Created Update object: {update}")
-        
-        # Process the update
+async def process_update_async(update_data):
+    """Process a single update asynchronously"""
+    global app
+    
+    if app is None:
+        app = init_application()
         await app.initialize()
+    
+    try:
+        update = Update.de_json(update_data, app.bot)
         await app.process_update(update)
-        await app.shutdown()
+    except Exception as e:
+        logger.error(f"Error processing update: {e}", exc_info=True)
+
+def handler(event, context):
+    """
+    Yandex Cloud Serverless Container webhook handler.
+    Receives Telegram updates via HTTP POST and processes them.
+    """
+    try:
+        # Validate request has body
+        if 'body' not in event or not event['body']:
+            logger.warning("Received event without body")
+            return {
+                'statusCode': 400,
+                'body': json.dumps({'error': 'No body in request'})
+            }
         
-        logger.info("✅ Update processed successfully")
-        logger.info("=" * 60)
-        return web.Response(text="OK", status=200)
+        # Parse Telegram update
+        try:
+            update_data = json.loads(event['body'])
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in webhook request: {e}")
+            return {
+                'statusCode': 400,
+                'body': json.dumps({'error': 'Invalid JSON'})
+            }
+        
+        # Process update synchronously (Yandex Cloud requires sync handler)
+        # Run async function in sync context
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        try:
+            loop.run_until_complete(process_update_async(update_data))
+        finally:
+            loop.close()
+        
+        logger.info("Telegram update processed successfully")
+        return {
+            'statusCode': 200,
+            'body': json.dumps({'status': 'ok'})
+        }
         
     except Exception as e:
-        logger.error(f"❌ Webhook error: {e}", exc_info=True)
-        logger.info("=" * 60)
-        return web.Response(text="Internal error", status=500)
-
-
-async def health_check(request):
-    """Health check endpoint for Yandex Cloud"""
-    return web.Response(text="OK", status=200)
-
-
-# ========== START HTTP SERVER ==========
-if __name__ == "__main__":
-    logger.info("Starting webhook server...")
-    
-    # Create aiohttp web app
-    web_app = web.Application()
-    web_app.router.add_post('/', webhook_handler)  # Telegram webhook
-    web_app.router.add_get('/health', health_check)  # Health check
-    
-    # Get port from environment (Yandex uses PORT env var)
-    port = int(os.getenv('PORT', 8080))
-    logger.info(f"Server will listen on port {port}")
-    
-    # Run server
-    web.run_app(web_app, host='0.0.0.0', port=port)
+        logger.error(f"Webhook error: {e}", exc_info=True)
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': str(e)})
+        }
