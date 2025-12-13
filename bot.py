@@ -2,15 +2,16 @@ import os
 import json
 import datetime
 import logging
+from aiohttp import web
 import gspread
 from google.oauth2.service_account import Credentials
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
-# Configure logging
+# Configure logging - MORE VERBOSE
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    level=logging.DEBUG  # Changed to DEBUG for more info
 )
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,10 @@ class SamboBot:
         self.bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
         self.sheet_id = os.getenv("GOOGLE_SHEET_ID")
         self.user_id = os.getenv("TELEGRAM_USER_ID")
+        
+        logger.info(f"Initializing bot with token: {self.bot_token[:10]}...")
+        logger.info(f"Sheet ID: {self.sheet_id}")
+        logger.info(f"User ID: {self.user_id}")
         
         if not self.bot_token:
             raise ValueError("TELEGRAM_BOT_TOKEN not set")
@@ -37,7 +42,6 @@ class SamboBot:
                 
             creds_dict = json.loads(creds_json)
             
-            # FIXED: Removed trailing spaces in scope
             credentials = Credentials.from_service_account_info(
                 creds_dict,
                 scopes=['https://www.googleapis.com/auth/spreadsheets']
@@ -151,7 +155,7 @@ class SamboBot:
                 self.consumption_sheet.update_cell(1, len(headers) + 1, config['count_col'])
                 count_col_index = len(headers) + 1
             try:
-                cost_col_index = handlers.index(config['cost_col']) + 1
+                cost_col_index = headers.index(config['cost_col']) + 1
             except ValueError:
                 self.consumption_sheet.update_cell(1, len(headers) + 2, config['cost_col'])
                 cost_col_index = len(headers) + 2
@@ -260,9 +264,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bot = context.bot_data["sambo_bot"]
-    user_id = update.effective_user.id  # This is an INTEGER
+    user_id = update.effective_user.id
     
-    # Convert bot.user_id to int for comparison
     if user_id != int(bot.user_id):
         await update.message.reply_text("Sorry, this bot is for authorized users only.")
         return
@@ -283,9 +286,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_activity(update: Update, context: ContextTypes.DEFAULT_TYPE, habit_id: int):
     bot = context.bot_data["sambo_bot"]
-    user_id = update.effective_user.id  # This is an INTEGER
+    user_id = update.effective_user.id
     
-    # Convert bot.user_id to int for comparison
     if user_id != int(bot.user_id):
         await update.message.reply_text("Sorry, this bot is for authorized users only.")
         return
@@ -309,61 +311,89 @@ async def habit_5(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await handle_activity(update, context, 5)
 
 
-# ========== YANDEX SERVERLESS CONTAINER WEBHOOK HANDLER ==========
-def handler(event, context):
-    """
-    Yandex Cloud Serverless Container webhook handler.
-    Receives Telegram updates via HTTP POST and processes them.
-    """
-    import asyncio
-    
-    # Validate request has body
-    if 'body' not in event:
-        logger.warning("Received event without body")
-        return {'statusCode': 400, 'body': ''}
-    
+# ========== GLOBAL BOT INSTANCE ==========
+# Initialize ONCE at module level, not per request
+logger.info("Creating global bot instance...")
+sambo_bot = SamboBot()
+app = ApplicationBuilder().token(sambo_bot.bot_token).build()
+app.bot_data["sambo_bot"] = sambo_bot
+
+# Register all handlers
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("help", help_command))
+app.add_handler(CommandHandler("1", habit_1))
+app.add_handler(CommandHandler("2", habit_2))
+app.add_handler(CommandHandler("3", habit_3))
+app.add_handler(CommandHandler("4", habit_4))
+app.add_handler(CommandHandler("5", habit_5))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+logger.info("Bot handlers registered")
+
+
+# ========== WEBHOOK HTTP SERVER ==========
+async def webhook_handler(request):
+    """Handle incoming webhook POST requests from Telegram"""
     try:
-        # Parse Telegram update
-        update_data = json.loads(event['body'])
+        logger.info("=" * 60)
+        logger.info("WEBHOOK REQUEST RECEIVED")
+        logger.info(f"Method: {request.method}")
+        logger.info(f"Path: {request.path}")
+        logger.info(f"Headers: {dict(request.headers)}")
         
-        async def process_update():
-            # Create bot instance
-            bot = SamboBot()
-            
-            # Build and initialize Telegram Application
-            app = ApplicationBuilder().token(bot.bot_token).build()
-            app.bot_data["sambo_bot"] = bot
-
-            # Register all handlers
-            app.add_handler(CommandHandler("start", start))
-            app.add_handler(CommandHandler("help", help_command))
-            app.add_handler(CommandHandler("1", habit_1))
-            app.add_handler(CommandHandler("2", habit_2))
-            app.add_handler(CommandHandler("3", habit_3))
-            app.add_handler(CommandHandler("4", habit_4))
-            app.add_handler(CommandHandler("5", habit_5))
-            app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-            # Initialize the application
-            await app.initialize()
-            
-            try:
-                # Parse and process the update
-                update = Update.de_json(update_data, app.bot)
-                await app.process_update(update)
-            finally:
-                # Always shutdown even if error occurs
-                await app.shutdown()
-
-        # Run async processing
-        asyncio.run(process_update())
+        # Read raw body
+        raw_body = await request.read()
+        logger.info(f"Raw body (first 500 chars): {raw_body[:500]}")
         
-        logger.info("Telegram update processed successfully")
-        return {'statusCode': 200, 'body': ''}
+        # Parse JSON
+        try:
+            update_data = json.loads(raw_body)
+            logger.info(f"Parsed JSON successfully: {json.dumps(update_data, indent=2)[:500]}")
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error: {e}")
+            return web.Response(text="Invalid JSON", status=400)
         
-    except json.JSONDecodeError as e:
-        logger.error(f"Invalid JSON in webhook request: {e}")
-        return {'statusCode': 400, 'body': ''}
+        # Check if this is a valid Telegram update
+        if 'update_id' not in update_data:
+            logger.error(f"No update_id in request. Keys present: {list(update_data.keys())}")
+            return web.Response(text="Not a Telegram update", status=400)
+        
+        # Convert to Telegram Update object
+        update = Update.de_json(update_data, app.bot)
+        logger.info(f"Created Update object: {update}")
+        
+        # Process the update
+        await app.initialize()
+        await app.process_update(update)
+        await app.shutdown()
+        
+        logger.info("✅ Update processed successfully")
+        logger.info("=" * 60)
+        return web.Response(text="OK", status=200)
+        
     except Exception as e:
-        logger.error(f"Webhook error: {e}", exc_info=True)
-        return {'statusCode': 500, 'body': ''}
+        logger.error(f"❌ Webhook error: {e}", exc_info=True)
+        logger.info("=" * 60)
+        return web.Response(text="Internal error", status=500)
+
+
+async def health_check(request):
+    """Health check endpoint for Yandex Cloud"""
+    return web.Response(text="OK", status=200)
+
+
+# ========== START HTTP SERVER ==========
+if __name__ == "__main__":
+    logger.info("Starting webhook server...")
+    
+    # Create aiohttp web app
+    web_app = web.Application()
+    web_app.router.add_post('/', webhook_handler)  # Telegram webhook
+    web_app.router.add_get('/health', health_check)  # Health check
+    
+    # Get port from environment (Yandex uses PORT env var)
+    port = int(os.getenv('PORT', 8080))
+    logger.info(f"Server will listen on port {port}")
+    
+    # Run server
+    web.run_app(web_app, host='0.0.0.0', port=port)
