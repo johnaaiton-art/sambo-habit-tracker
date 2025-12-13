@@ -1,256 +1,355 @@
 import os
 import json
-import asyncio
 import datetime
 import logging
 import gspread
-
 from google.oauth2.service_account import Credentials
 from telegram import Update
-from telegram.ext import (
-    Application,
-    ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
-    ContextTypes,
-    filters,
-)
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from flask import Flask, request, Response
 
-# ================== LOGGING ==================
-logging.basicConfig(level=logging.INFO)
+# Configure logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
 logger = logging.getLogger(__name__)
 
-# ================== TIMEZONE ==================
+# Moscow timezone
 MOSCOW_TZ = datetime.timezone(datetime.timedelta(hours=3))
 
-# ================== BOT LOGIC ==================
 class SamboBot:
     def __init__(self):
         self.bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
         self.sheet_id = os.getenv("GOOGLE_SHEET_ID")
         self.user_id = os.getenv("TELEGRAM_USER_ID")
-
+        
         if not self.bot_token:
             raise ValueError("TELEGRAM_BOT_TOKEN not set")
-
+            
         self.init_sheets()
-
+    
     def init_sheets(self):
-        creds_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
-        if not creds_json:
-            raise ValueError("GOOGLE_CREDENTIALS_JSON not set")
-
-        creds_dict = json.loads(creds_json)
-
-        credentials = Credentials.from_service_account_info(
-            creds_dict,
-            scopes=["https://www.googleapis.com/auth/spreadsheets"],
-        )
-
-        self.gs_client = gspread.authorize(credentials)
-        self.spreadsheet = self.gs_client.open_by_key(self.sheet_id)
-
-        self.activity_sheet = self.spreadsheet.worksheet("Activity")
-        self.consumption_sheet = self.spreadsheet.worksheet("Consumption")
-        self.language_sheet = self.spreadsheet.worksheet("Language")
-
-        logger.info("Google Sheets initialized")
-
-    def now(self):
+        """Initialize Google Sheets connection"""
+        try:
+            creds_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
+            if not creds_json:
+                raise ValueError("GOOGLE_CREDENTIALS_JSON not set")
+                
+            creds_dict = json.loads(creds_json)
+            
+            # FIXED: Removed trailing spaces in scope
+            credentials = Credentials.from_service_account_info(
+                creds_dict,
+                scopes=['https://www.googleapis.com/auth/spreadsheets']
+            )
+            
+            self.gs_client = gspread.authorize(credentials)
+            self.spreadsheet = self.gs_client.open_by_key(self.sheet_id)
+            
+            self.activity_sheet = self.spreadsheet.worksheet("Activity")
+            self.consumption_sheet = self.spreadsheet.worksheet("Consumption") 
+            self.language_sheet = self.spreadsheet.worksheet("Language")
+            
+            logger.info("Google Sheets initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize Google Sheets: {e}")
+            raise
+    
+    def get_moscow_now(self):
         return datetime.datetime.now(MOSCOW_TZ)
+    
+    def get_week_number(self, date=None):
+        if date is None:
+            date = self.get_moscow_now()
+        days_since_monday = date.weekday()
+        week_start = date - datetime.timedelta(days=days_since_monday)
+        return week_start.strftime("%Y-%m-%d")
 
-    def week_start(self, date=None):
-        date = date or self.now()
-        monday = date - datetime.timedelta(days=date.weekday())
-        return monday.strftime("%Y-%m-%d")
-
-    # ---------- ACTIVITY ----------
     def record_activity(self, user_id, habit_id):
-        habit_map = {
-            1: ("Prayer", "Prayer with first water"),
-            2: ("Qi Gong", "Qi Gong routine"),
-            3: ("Ball", "Ball freestyling"),
-            4: ("Run/Stretch", "Run & Stretch"),
-            5: ("Strength/Stretch", "Strength & Stretch"),
-        }
+        try:
+            now = self.get_moscow_now()
+            today_str = now.strftime("%Y-%m-%d")
+            week_number = self.get_week_number(now)
+            
+            habit_map = {
+                1: ("Prayer", "Prayer with first water"),
+                2: ("Qi Gong", "Qi Gong routine"),
+                3: ("Ball", "Freestyling on the ball"),
+                4: ("Run/Stretch", "20 minute run and stretch"),
+                5: ("Strength/Stretch", "Strengthening and stretching")
+            }
+            
+            if habit_id not in habit_map:
+                return False, f"Invalid habit number. Use 1-5."
+            
+            column_name, habit_name = habit_map[habit_id]
+            row_num = self.find_or_create_activity_row(user_id, today_str, week_number)
+            if not row_num:
+                return False, "Failed to create activity row"
+            
+            headers = self.activity_sheet.row_values(1)
+            try:
+                col_index = headers.index(column_name) + 1
+            except ValueError:
+                self.activity_sheet.update_cell(1, len(headers) + 1, column_name)
+                col_index = len(headers) + 1
+            
+            current_value = self.activity_sheet.cell(row_num, col_index).value
+            if current_value and current_value.strip():
+                return False, f"{habit_name} already recorded today"
+            
+            timestamp = now.strftime("%H:%M")
+            self.activity_sheet.update_cell(row_num, col_index, f"✓ ({timestamp})")
+            logger.info(f"Recorded habit {habit_id} for user {user_id}")
+            return True, f"✓ {habit_name} recorded at {timestamp}!"
+        except Exception as e:
+            logger.error(f"Error recording activity: {e}")
+            return False, "Error recording habit"
 
-        if habit_id not in habit_map:
-            return False, "Invalid habit"
+    def find_or_create_activity_row(self, user_id, date_str, week_number):
+        try:
+            all_data = self.activity_sheet.get_all_values()
+            for i, row in enumerate(all_data[1:], start=2):
+                if len(row) > 1 and str(row[0]) == str(user_id) and row[1] == date_str:
+                    return i
+            new_row = [str(user_id), date_str, "", "", "", "", "", week_number, ""]
+            self.activity_sheet.append_row(new_row)
+            return len(all_data) + 1
+        except Exception as e:
+            logger.error(f"Error finding activity row: {e}")
+            return None
 
-        now = self.now()
-        date_str = now.strftime("%Y-%m-%d")
-        week = self.week_start(now)
-
-        col_name, habit_name = habit_map[habit_id]
-        row = self._find_or_create(self.activity_sheet, user_id, date_str, week)
-
-        headers = self.activity_sheet.row_values(1)
-        if col_name not in headers:
-            self.activity_sheet.update_cell(1, len(headers) + 1, col_name)
-            headers.append(col_name)
-
-        col = headers.index(col_name) + 1
-        current = self.activity_sheet.cell(row, col).value
-
-        if current:
-            return False, f"{habit_name} already recorded"
-
-        self.activity_sheet.update_cell(row, col, f"✓ ({now.strftime('%H:%M')})")
-        return True, f"✓ {habit_name} recorded"
-
-    # ---------- CONSUMPTION ----------
     def record_consumption(self, user_id, text):
-        now = self.now()
-        date_str = now.strftime("%Y-%m-%d")
-        week = self.week_start(now)
+        try:
+            now = self.get_moscow_now()
+            today_str = now.strftime("%Y-%m-%d")
+            week_number = self.get_week_number(now)
+            text = text.strip().lower()
+            parts = text.split()
+            if not parts or parts[0][0] not in ['x', 'y', 'z']:
+                return False, "Invalid format. Use: x, xx, xx 150, y 75, z"
+            habit_type = parts[0][0]
+            count = len(parts[0])
+            cost = 0
+            if len(parts) > 1 and parts[1].replace('.', '').isdigit():
+                cost = int(float(parts[1]))
+            col_map = {
+                'x': {'count_col': 'Coffee (x)', 'cost_col': 'Coffee Cost', 'name': 'Coffee'},
+                'y': {'count_col': 'Sugary (y)', 'cost_col': 'Sugary Cost', 'name': 'Sugary drinks'},
+                'z': {'count_col': 'Flour (z)', 'cost_col': 'Flour Cost', 'name': 'Flour products'}
+            }
+            if habit_type not in col_map:
+                return False, "Invalid type. Use x, y, or z"
+            config = col_map[habit_type]
+            row_num = self.find_or_create_consumption_row(user_id, today_str, week_number)
+            if not row_num:
+                return False, "Failed to create consumption row"
+            headers = self.consumption_sheet.row_values(1)
+            try:
+                count_col_index = headers.index(config['count_col']) + 1
+            except ValueError:
+                self.consumption_sheet.update_cell(1, len(headers) + 1, config['count_col'])
+                count_col_index = len(headers) + 1
+            try:
+                cost_col_index = headers.index(config['cost_col']) + 1
+            except ValueError:
+                self.consumption_sheet.update_cell(1, len(headers) + 1, config['cost_col'])
+                cost_col_index = len(headers) + 1
+            current_count = self.consumption_sheet.cell(row_num, count_col_index).value
+            current_cost = self.consumption_sheet.cell(row_num, cost_col_index).value
+            new_count = int(current_count or 0) + count
+            new_cost = int(current_cost or 0) + cost
+            self.consumption_sheet.update_cell(row_num, count_col_index, new_count)
+            self.consumption_sheet.update_cell(row_num, cost_col_index, new_cost)
+            logger.info(f"Recorded consumption {habit_type} x{count} for user {user_id}")
+            cost_text = f" ({cost} rub)" if cost > 0 else ""
+            return True, f"✓ {config['name']} x{count} recorded{cost_text}! Total today: {new_count}"
+        except Exception as e:
+            logger.error(f"Error recording consumption: {e}")
+            return False, "Error recording consumption"
 
-        parts = text.split()
-        letter = parts[0][0]
-        count = len(parts[0])
-        cost = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
+    def find_or_create_consumption_row(self, user_id, date_str, week_number):
+        try:
+            all_data = self.consumption_sheet.get_all_values()
+            for i, row in enumerate(all_data[1:], start=2):
+                if len(row) > 1 and str(row[0]) == str(user_id) and row[1] == date_str:
+                    return i
+            new_row = [str(user_id), date_str, 0, 0, 0, 0, 0, 0, week_number, ""]
+            self.consumption_sheet.append_row(new_row)
+            return len(all_data) + 1
+        except Exception as e:
+            logger.error(f"Error finding consumption row: {e}")
+            return None
 
-        mapping = {
-            "x": ("Coffee (x)", "Coffee Cost", "Coffee"),
-            "y": ("Sugary (y)", "Sugary Cost", "Sugary"),
-            "z": ("Flour (z)", "Flour Cost", "Flour"),
-        }
+    def record_language(self, user_id, lang_code):
+        try:
+            now = self.get_moscow_now()
+            today_str = now.strftime("%Y-%m-%d")
+            week_number = self.get_week_number(now)
+            lang_map = {
+                'ch': ('Chinese (ch)', 'Chinese'),
+                'he': ('Hebrew (he)', 'Hebrew'),
+                'ta': ('Tatar (ta)', 'Tatar')
+            }
+            if lang_code not in lang_map:
+                return False, "Invalid language code. Use: ch, he, ta"
+            column_name, lang_name = lang_map[lang_code]
+            row_num = self.find_or_create_language_row(user_id, today_str, week_number)
+            if not row_num:
+                return False, "Failed to create language row"
+            headers = self.language_sheet.row_values(1)
+            try:
+                col_index = headers.index(column_name) + 1
+            except ValueError:
+                self.language_sheet.update_cell(1, len(headers) + 1, column_name)
+                col_index = len(headers) + 1
+            current_value = self.language_sheet.cell(row_num, col_index).value
+            current_sessions = int(current_value or 0)
+            new_sessions = current_sessions + 1
+            timestamp = now.strftime("%H:%M")
+            self.language_sheet.update_cell(row_num, col_index, new_sessions)
+            logger.info(f"Recorded language {lang_code} for user {user_id}")
+            return True, f"✓ {lang_name} session #{new_sessions} recorded at {timestamp}!"
+        except Exception as e:
+            logger.error(f"Error recording language: {e}")
+            return False, "Error recording language"
 
-        if letter not in mapping:
-            return False, "Invalid format"
-
-        count_col, cost_col, name = mapping[letter]
-        row = self._find_or_create(self.consumption_sheet, user_id, date_str, week)
-
-        headers = self.consumption_sheet.row_values(1)
-        for col in (count_col, cost_col):
-            if col not in headers:
-                self.consumption_sheet.update_cell(1, len(headers) + 1, col)
-                headers.append(col)
-
-        ci = headers.index(count_col) + 1
-        co = headers.index(cost_col) + 1
-
-        new_count = int(self.consumption_sheet.cell(row, ci).value or 0) + count
-        new_cost = int(self.consumption_sheet.cell(row, co).value or 0) + cost
-
-        self.consumption_sheet.update_cell(row, ci, new_count)
-        self.consumption_sheet.update_cell(row, co, new_cost)
-
-        return True, f"✓ {name} x{count} recorded"
-
-    # ---------- LANGUAGE ----------
-    def record_language(self, user_id, code):
-        now = self.now()
-        date_str = now.strftime("%Y-%m-%d")
-        week = self.week_start(now)
-
-        mapping = {
-            "ch": ("Chinese (ch)", "Chinese"),
-            "he": ("Hebrew (he)", "Hebrew"),
-            "ta": ("Tatar (ta)", "Tatar"),
-        }
-
-        if code not in mapping:
-            return False, "Invalid language"
-
-        col_name, label = mapping[code]
-        row = self._find_or_create(self.language_sheet, user_id, date_str, week)
-
-        headers = self.language_sheet.row_values(1)
-        if col_name not in headers:
-            self.language_sheet.update_cell(1, len(headers) + 1, col_name)
-            headers.append(col_name)
-
-        col = headers.index(col_name) + 1
-        current = int(self.language_sheet.cell(row, col).value or 0)
-        self.language_sheet.update_cell(row, col, current + 1)
-
-        return True, f"✓ {label} session recorded"
-
-    # ---------- ROW HELPERS ----------
-    def _find_or_create(self, sheet, user_id, date_str, week):
-        rows = sheet.get_all_values()
-        for i, r in enumerate(rows[1:], start=2):
-            if r and r[0] == str(user_id) and r[1] == date_str:
-                return i
-        sheet.append_row([str(user_id), date_str, "", "", "", "", week])
-        return len(rows) + 1
+    def find_or_create_language_row(self, user_id, date_str, week_number):
+        try:
+            all_data = self.language_sheet.get_all_values()
+            for i, row in enumerate(all_data[1:], start=2):
+                if len(row) > 1 and str(row[0]) == str(user_id) and row[1] == date_str:
+                    return i
+            new_row = [str(user_id), date_str, 0, 0, 0, week_number, ""]
+            self.language_sheet.append_row(new_row)
+            return len(all_data) + 1
+        except Exception as e:
+            logger.error(f"Error finding language row: {e}")
+            return None
 
 
-# ================== TELEGRAM HANDLERS ==================
+# ========== Telegram Handlers ==========
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🥋 Sambo Habit Tracker ready")
+    help_text = """
+🥋 Sambo Habit Tracker Bot
 
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    bot: SamboBot = context.bot_data["bot"]
-    user_id = update.effective_user.id
+📊 ACTIVITY HABITS:
+/1 - Prayer with first water
+/2 - Qi Gong routine
+/3 - Ball freestyling
+/4 - Run/Stretch (20 min)
+/5 - Strength/Stretch
 
-    if str(user_id) != bot.user_id:
+🍽 CONSUMPTION (text message):
+x, xx, xxx - Coffee (+ optional cost)
+y, yy, yyy - Sugary drinks
+z, zz, zzz - Flour products
+Example: "xx 150" = 2 coffees, 150 rub
+
+🌍 LANGUAGE LEARNING:
+ch - Chinese session
+he - Hebrew session
+ta - Tatar session
+
+Type /help to see this message again.
+"""
+    await update.message.reply_text(help_text)
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await start(update, context)
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    bot = context.bot_data["sambo_bot"]
+    user_id = update.effective_user.id  # This is an INTEGER
+    
+    # Convert bot.user_id to int for comparison
+    if user_id != int(bot.user_id):
+        await update.message.reply_text("Sorry, this bot is for authorized users only.")
         return
-
-    text = update.message.text.lower().strip()
-
-    if text in ("ch", "he", "ta"):
-        ok, msg = bot.record_language(user_id, text)
-    elif text and text[0] in ("x", "y", "z"):
-        ok, msg = bot.record_consumption(user_id, text)
-    else:
-        await update.message.reply_text("Unknown command")
+    
+    text = update.message.text.strip().lower()
+    
+    if text in ['ch', 'he', 'ta']:
+        success, message = bot.record_language(user_id, text)
+        await update.message.reply_text(message)
         return
-
-    await update.message.reply_text(msg)
-
-async def habit(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    bot: SamboBot = context.bot_data["bot"]
-    user_id = update.effective_user.id
-
-    if str(user_id) != bot.user_id:
+    
+    if text and text[0] in ['x', 'y', 'z']:
+        success, message = bot.record_consumption(user_id, text)
+        await update.message.reply_text(message)
         return
+    
+    await update.message.reply_text("Unknown command. Type /help for instructions.")
 
-    habit_id = int(context.args[0])
-    ok, msg = bot.record_activity(user_id, habit_id)
-    await update.message.reply_text(msg)
+async def handle_activity(update: Update, context: ContextTypes.DEFAULT_TYPE, habit_id: int):
+    bot = context.bot_data["sambo_bot"]
+    user_id = update.effective_user.id  # This is an INTEGER
+    
+    # Convert bot.user_id to int for comparison
+    if user_id != int(bot.user_id):
+        await update.message.reply_text("Sorry, this bot is for authorized users only.")
+        return
+    
+    success, message = bot.record_activity(user_id, habit_id)
+    await update.message.reply_text(message)
+
+async def habit_1(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await handle_activity(update, context, 1)
+
+async def habit_2(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await handle_activity(update, context, 2)
+
+async def habit_3(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await handle_activity(update, context, 3)
+
+async def habit_4(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await handle_activity(update, context, 4)
+
+async def habit_5(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await handle_activity(update, context, 5)
 
 
-# ================== GLOBAL APP (CRITICAL) ==================
-APP: Application | None = None
-LOOP = asyncio.get_event_loop()
+# ========== Flask App for Webhook ==========
+flask_app = Flask(__name__)
 
-def init_app():
-    global APP
-    if APP:
-        return APP
+@flask_app.route('/', methods=['GET'])
+def index():
+    return "Sambo Bot Webhook is running!"
 
-    sambo = SamboBot()
-
-    app = ApplicationBuilder().token(sambo.bot_token).build()
-    app.bot_data["bot"] = sambo
-
-    app.add_handler(CommandHandler("start", start))
-    for i in range(1, 6):
-        app.add_handler(CommandHandler(str(i), habit))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-
-    LOOP.run_until_complete(app.initialize())
-    APP = app
-
-    logger.info("Telegram app initialized ONCE")
-    return APP
-
-
-# ================== YANDEX WEBHOOK ENTRY ==================
-def handler(event, context):
+@flask_app.route('/<path:path>', methods=['POST'])
+async def webhook(path):
+    if path != application.bot.token:
+        return Response('Invalid path', status=403)
+    
     try:
-        if "body" not in event:
-            return {"statusCode": 400, "body": ""}
+        update_data = request.get_json(force=True)
+        if not update_data:
+            return Response('No JSON data', status=400)
+        
+        update = Update.de_json(update_data, application.bot)
+        await application.process_update(update)
+        return Response('OK', status=200)
+    except Exception as e:
+        logger.error(f"Webhook error: {e}")
+        return Response('Error', status=500)
 
-        app = init_app()
+if __name__ == '__main__':
+    # Initialize SamboBot and Application
+    sambo_bot = SamboBot()
+    application = ApplicationBuilder().token(sambo_bot.bot_token).build()
+    application.bot_data["sambo_bot"] = sambo_bot
 
-        update = Update.de_json(json.loads(event["body"]), app.bot)
-        LOOP.run_until_complete(app.process_update(update))
+    # Register all handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("1", habit_1))
+    application.add_handler(CommandHandler("2", habit_2))
+    application.add_handler(CommandHandler("3", habit_3))
+    application.add_handler(CommandHandler("4", habit_4))
+    application.add_handler(CommandHandler("5", habit_5))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-        return {"statusCode": 200, "body": ""}
-
-    except Exception:
-        logger.exception("Webhook failure")
-        return {"statusCode": 500, "body": ""}
+    # Run Flask app
+    port = int(os.environ.get('PORT', 8080))
+    flask_app.run(host='0.0.0.0', port=port, debug=False)
