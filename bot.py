@@ -25,17 +25,22 @@ class SamboBot:
         
         if not self.bot_token:
             raise ValueError("TELEGRAM_BOT_TOKEN not set")
+        if not self.sheet_id:
+            raise ValueError("GOOGLE_SHEET_ID not set")
+        if not self.user_id:
+            raise ValueError("TELEGRAM_USER_ID not set")
             
         self.init_sheets()
     
     def init_sheets(self):
         """Initialize Google Sheets connection"""
         try:
-            creds_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
-            if not creds_json:
-                raise ValueError("GOOGLE_CREDENTIALS_JSON not set")
-                
-            creds_dict = json.loads(creds_json)
+            creds_path = os.getenv("GOOGLE_CREDENTIALS_PATH")
+            if not creds_path:
+                raise ValueError("GOOGLE_CREDENTIALS_PATH not set")
+
+            with open(creds_path, "r") as f:
+                creds_dict = json.load(f)
             
             credentials = Credentials.from_service_account_info(
                 creds_dict,
