@@ -1,34 +1,24 @@
-﻿# Python
-__pycache__/
-*.py[cod]
-*.class
-*.so
-.Python
-env/
-venv/
-*.egg-info/
-build/
-dist/
-
-# Secrets - NEVER commit these!
-*.json
+# Environment variables (NEVER commit these!)
 .env
-*.pem
-*.key
-credentials*.json
-service-account*.json
+*.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+env/
 
 # IDE
 .vscode/
 .idea/
 *.swp
 
+# Logs
+*.log
+
 # OS
 .DS_Store
 Thumbs.db
-
-# Temporary
-*.tmp
-*.bak
-*.tar
-*.tar.gz
