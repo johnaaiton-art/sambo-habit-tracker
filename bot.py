@@ -72,6 +72,7 @@ class SamboBot:
         return week_start.strftime("%Y-%m-%d")
 
     def record_activity(self, user_id, habit_id):
+        """Record activity habit with proper column indexing"""
         try:
             now = self.get_moscow_now()
             today_str = now.strftime("%Y-%m-%d")
@@ -86,74 +87,138 @@ class SamboBot:
             }
             
             if habit_id not in habit_map:
-                return False, f"Invalid habit number. Use 1-5."
+                return False, "Invalid habit number. Use 1-5."
             
             column_name, habit_name = habit_map[habit_id]
+            
+            # DEBUG: Log what we're looking for
+            logger.info(f"📝 Recording {habit_name} ({column_name}) for user {user_id} on {today_str}")
+            
+            # Find or create row for today
             row_num = self.find_or_create_activity_row(user_id, today_str, week_number)
             if not row_num:
                 return False, "Failed to create activity row"
             
+            # Get headers to find correct column
             headers = self.activity_sheet.row_values(1)
-            try:
-                col_index = headers.index(column_name) + 1
-            except ValueError:
+            logger.info(f"📊 Headers: {headers}")
+            
+            # Find the column index by searching for exact header match
+            col_index = None
+            for idx, header in enumerate(headers, start=1):
+                if header.strip() == column_name:
+                    col_index = idx
+                    logger.info(f"✓ Found column '{column_name}' at index {col_index}")
+                    break
+            
+            # If column doesn't exist, create it
+            if col_index is None:
+                logger.info(f"➕ Creating new column: {column_name}")
                 self.activity_sheet.update_cell(1, len(headers) + 1, column_name)
                 col_index = len(headers) + 1
+                headers = self.activity_sheet.row_values(1)  # Refresh
             
+            logger.info(f"📍 Writing to cell: Row {row_num}, Column {col_index}")
+            
+            # Check if already recorded
             current_value = self.activity_sheet.cell(row_num, col_index).value
-            if current_value and current_value.strip():
+            if current_value and str(current_value).strip():
                 return False, f"{habit_name} already recorded today"
             
-            timestamp = now.strftime("%H:%M")
-            # Record just a checkmark (✓) - the cloud function counts any non-empty value
+            # Record simple checkmark - cloud function counts any non-empty value
             self.activity_sheet.update_cell(row_num, col_index, "✓")
-            logger.info(f"✅ Recorded habit {habit_id} for user {user_id}")
+            
+            # Verify the update
+            verify_value = self.activity_sheet.cell(row_num, col_index).value
+            logger.info(f"✅ Verified: Cell ({row_num},{col_index}) = '{verify_value}'")
+            
+            timestamp = now.strftime("%H:%M")
             return True, f"✓ {habit_name} recorded at {timestamp}!"
+            
         except Exception as e:
             logger.error(f"❌ Error recording activity: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return False, "Error recording habit"
 
     def find_or_create_activity_row(self, user_id, date_str, week_number):
+        """Find existing row or create new one for activity tracking"""
         try:
             all_data = self.activity_sheet.get_all_values()
+            
+            logger.info(f"🔍 Searching for user_id='{user_id}', date='{date_str}'")
+            logger.info(f"📋 Total rows: {len(all_data)}")
+            
+            # Search for existing row (skip header at index 0)
             for i, row in enumerate(all_data[1:], start=2):
-                if len(row) > 1 and str(row[0]) == str(user_id) and row[1] == date_str:
-                    return i
-            # Create new row with proper structure
-            new_row = [str(user_id), date_str, "", "", "", "", "", week_number, ""]
+                if len(row) >= 2:
+                    row_user = str(row[0]).strip() if row[0] else ""
+                    row_date = str(row[1]).strip() if row[1] else ""
+                    
+                    logger.info(f"   Row {i}: user='{row_user}', date='{row_date}'")
+                    
+                    if row_user == str(user_id).strip() and row_date == date_str:
+                        logger.info(f"🎯 Found existing row at {i}")
+                        return i
+            
+            # No existing row found - create new one
+            logger.info("📝 Creating new row...")
+            
+            headers = self.activity_sheet.row_values(1)
+            new_row = [str(user_id), date_str]
+            
+            # Fill empty values for all habit columns
+            for i in range(2, len(headers)):
+                if headers[i] == "Week Number":
+                    new_row.append(week_number)
+                elif headers[i] == "Goals":
+                    new_row.append("")
+                else:
+                    new_row.append("")  # Empty for habit columns
+            
+            logger.info(f"📤 Appending: {new_row}")
             self.activity_sheet.append_row(new_row)
-            return len(all_data) + 1
+            
+            # Get the new row number
+            updated_data = self.activity_sheet.get_all_values()
+            new_row_num = len(updated_data)
+            logger.info(f"✅ New row created at {new_row_num}")
+            
+            return new_row_num
+            
         except Exception as e:
-            logger.error(f"Error finding activity row: {e}")
+            logger.error(f"❌ Error finding activity row: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return None
 
     def record_consumption(self, user_id, text):
+        """Record consumption with proper validation"""
         try:
             now = self.get_moscow_now()
             today_str = now.strftime("%Y-%m-%d")
             week_number = self.get_week_number(now)
             
-            # Clean and parse input
+            # Parse input
             text = text.strip().lower()
             parts = text.split()
             
             if not parts:
-                return False, "Invalid format. Use: x, xx, xx 150, y 75, z"
+                return False, "Invalid format. Use: x, xx, xxx, y, z"
             
             first_part = parts[0]
             
-            # Check if first character is valid
             if not first_part or first_part[0] not in ['x', 'y', 'z']:
-                return False, "Invalid format. Start with x, y, or z"
+                return False, "Start with x, y, or z"
             
             habit_type = first_part[0]
             count = len(first_part)
             
-            # Validate that all characters in first part are the same
+            # Validate all characters are the same
             if not all(c == habit_type for c in first_part):
-                return False, f"Invalid format. Use only '{habit_type}' characters (e.g., {habit_type}, {habit_type}{habit_type}, {habit_type}{habit_type}{habit_type})"
+                return False, f"Use only '{habit_type}' characters"
             
-            # Parse cost if provided
+            # Parse optional cost
             cost = 0
             if len(parts) > 1:
                 try:
@@ -168,21 +233,23 @@ class SamboBot:
             }
             
             config = col_map[habit_type]
+            
+            # Find or create row
             row_num = self.find_or_create_consumption_row(user_id, today_str, week_number)
             if not row_num:
                 return False, "Failed to create consumption row"
             
             headers = self.consumption_sheet.row_values(1)
             
-            # Find or create count column
+            # Find count column
             try:
                 count_col_index = headers.index(config['count_col']) + 1
             except ValueError:
                 self.consumption_sheet.update_cell(1, len(headers) + 1, config['count_col'])
                 count_col_index = len(headers) + 1
-                headers = self.consumption_sheet.row_values(1)  # Refresh headers
+                headers = self.consumption_sheet.row_values(1)
             
-            # Find or create cost column
+            # Find cost column
             try:
                 cost_col_index = headers.index(config['cost_col']) + 1
             except ValueError:
@@ -193,17 +260,18 @@ class SamboBot:
             current_count_val = self.consumption_sheet.cell(row_num, count_col_index).value
             current_cost_val = self.consumption_sheet.cell(row_num, cost_col_index).value
             
-            # Calculate new values
+            # Parse current values safely
             try:
-                current_count = int(current_count_val) if current_count_val else 0
+                current_count = int(current_count_val) if current_count_val and str(current_count_val).strip() else 0
             except (ValueError, TypeError):
                 current_count = 0
                 
             try:
-                current_cost = int(current_cost_val) if current_cost_val else 0
+                current_cost = int(current_cost_val) if current_cost_val and str(current_cost_val).strip() else 0
             except (ValueError, TypeError):
                 current_cost = 0
             
+            # Calculate new values
             new_count = current_count + count
             new_cost = current_cost + cost
             
@@ -212,9 +280,10 @@ class SamboBot:
             if cost > 0:
                 self.consumption_sheet.update_cell(row_num, cost_col_index, new_cost)
             
-            logger.info(f"✅ Recorded consumption {habit_type} x{count} for user {user_id}")
+            logger.info(f"✅ Recorded {habit_type} x{count} for user {user_id}")
             cost_text = f" ({cost} rub)" if cost > 0 else ""
-            return True, f"✓ {config['name']} x{count} recorded{cost_text}! Total today: {new_count}"
+            return True, f"✓ {config['name']} x{count} recorded{cost_text}! Total: {new_count}"
+            
         except Exception as e:
             logger.error(f"❌ Error recording consumption: {e}")
             import traceback
@@ -222,20 +291,49 @@ class SamboBot:
             return False, "Error recording consumption"
 
     def find_or_create_consumption_row(self, user_id, date_str, week_number):
+        """Find or create consumption row"""
         try:
             all_data = self.consumption_sheet.get_all_values()
+            
+            # Search for existing row
             for i, row in enumerate(all_data[1:], start=2):
-                if len(row) > 1 and str(row[0]) == str(user_id) and row[1] == date_str:
-                    return i
-            # Create new row with zeros for numeric columns
-            new_row = [str(user_id), date_str, 0, 0, 0, 0, 0, 0, week_number, ""]
+                if len(row) >= 2:
+                    row_user = str(row[0]).strip() if row[0] else ""
+                    row_date = str(row[1]).strip() if row[1] else ""
+                    
+                    if row_user == str(user_id).strip() and row_date == date_str:
+                        logger.info(f"Found consumption row: {i}")
+                        return i
+            
+            # Create new row
+            logger.info(f"Creating consumption row for {date_str}")
+            
+            headers = self.consumption_sheet.row_values(1)
+            new_row = [str(user_id), date_str]
+            
+            # Fill with zeros for numeric columns
+            for i in range(2, len(headers)):
+                header_name = headers[i] if i < len(headers) else ""
+                if "Cost" in header_name or header_name in ['Coffee (x)', 'Sugary (y)', 'Flour (z)']:
+                    new_row.append(0)
+                elif header_name == "Week Number":
+                    new_row.append(week_number)
+                else:
+                    new_row.append("")
+            
             self.consumption_sheet.append_row(new_row)
-            return len(all_data) + 1
+            
+            updated_data = self.consumption_sheet.get_all_values()
+            return len(updated_data)
+            
         except Exception as e:
             logger.error(f"Error finding consumption row: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return None
 
     def record_language(self, user_id, lang_code):
+        """Record language learning session"""
         try:
             now = self.get_moscow_now()
             today_str = now.strftime("%Y-%m-%d")
@@ -251,31 +349,43 @@ class SamboBot:
                 return False, "Invalid language code. Use: ch, he, ta"
             
             column_name, lang_name = lang_map[lang_code]
+            
+            # Find or create row
             row_num = self.find_or_create_language_row(user_id, today_str, week_number)
             if not row_num:
                 return False, "Failed to create language row"
             
             headers = self.language_sheet.row_values(1)
-            try:
-                col_index = headers.index(column_name) + 1
-            except ValueError:
+            
+            # Find column by name
+            col_index = None
+            for idx, header in enumerate(headers, start=1):
+                if header.strip() == column_name:
+                    col_index = idx
+                    break
+            
+            # Create column if needed
+            if col_index is None:
+                logger.info(f"Creating language column: {column_name}")
                 self.language_sheet.update_cell(1, len(headers) + 1, column_name)
                 col_index = len(headers) + 1
             
-            # Get current value
+            # Get current session count
             current_value = self.language_sheet.cell(row_num, col_index).value
             try:
-                current_sessions = int(current_value) if current_value else 0
+                current_sessions = int(current_value) if current_value and str(current_value).strip() else 0
             except (ValueError, TypeError):
                 current_sessions = 0
             
             new_sessions = current_sessions + 1
             timestamp = now.strftime("%H:%M")
             
-            # Update with integer count (cloud function expects integers)
+            # Update with integer (cloud function expects integers)
             self.language_sheet.update_cell(row_num, col_index, new_sessions)
-            logger.info(f"✅ Recorded language {lang_code} for user {user_id}")
+            
+            logger.info(f"✅ Recorded {lang_code} session #{new_sessions}")
             return True, f"✓ {lang_name} session #{new_sessions} recorded at {timestamp}!"
+            
         except Exception as e:
             logger.error(f"❌ Error recording language: {e}")
             import traceback
@@ -283,17 +393,45 @@ class SamboBot:
             return False, "Error recording language"
 
     def find_or_create_language_row(self, user_id, date_str, week_number):
+        """Find or create language row"""
         try:
             all_data = self.language_sheet.get_all_values()
+            
+            # Search for existing row
             for i, row in enumerate(all_data[1:], start=2):
-                if len(row) > 1 and str(row[0]) == str(user_id) and row[1] == date_str:
-                    return i
-            # Create new row with zeros for numeric columns
-            new_row = [str(user_id), date_str, 0, 0, 0, week_number, ""]
+                if len(row) >= 2:
+                    row_user = str(row[0]).strip() if row[0] else ""
+                    row_date = str(row[1]).strip() if row[1] else ""
+                    
+                    if row_user == str(user_id).strip() and row_date == date_str:
+                        logger.info(f"Found language row: {i}")
+                        return i
+            
+            # Create new row
+            logger.info(f"Creating language row for {date_str}")
+            
+            headers = self.language_sheet.row_values(1)
+            new_row = [str(user_id), date_str]
+            
+            # Fill with zeros for language columns
+            for i in range(2, len(headers)):
+                header_name = headers[i] if i < len(headers) else ""
+                if header_name in ['Chinese (ch)', 'Hebrew (he)', 'Tatar (ta)']:
+                    new_row.append(0)
+                elif header_name == "Week Number":
+                    new_row.append(week_number)
+                else:
+                    new_row.append("")
+            
             self.language_sheet.append_row(new_row)
-            return len(all_data) + 1
+            
+            updated_data = self.language_sheet.get_all_values()
+            return len(updated_data)
+            
         except Exception as e:
             logger.error(f"Error finding language row: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return None
 
 
@@ -337,7 +475,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     text = update.message.text.strip().lower()
     
-    # Check for language codes first
+    # Check for language codes
     if text in ['ch', 'he', 'ta']:
         success, message = bot.record_language(user_id, text)
         await update.message.reply_text(message)
@@ -378,11 +516,11 @@ async def habit_5(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await handle_activity(update, context, 5)
 
 
-# ========== MAIN FUNCTION FOR VM (LONG POLLING) ==========
+# ========== MAIN FUNCTION ==========
 def main():
-    """Run bot with long polling - perfect for Yandex VM"""
+    """Run bot with long polling - for Yandex VM"""
     try:
-        logger.info("🚀 Starting Sambo Bot with long polling...")
+        logger.info("🚀 Starting Sambo Bot...")
         
         # Initialize bot
         bot = SamboBot()
@@ -402,19 +540,19 @@ def main():
         application.add_handler(CommandHandler("5", habit_5))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
         
-        logger.info("✅ All handlers registered")
-        logger.info("🔄 Starting long polling (bot will stay online)...")
+        logger.info("✅ Handlers registered")
+        logger.info("🔄 Starting long polling...")
         
         # Start long polling
         application.run_polling(
             allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=True  # Ignore old messages when bot restarts
+            drop_pending_updates=True
         )
         
     except KeyboardInterrupt:
-        logger.info("🛑 Bot stopped by user (Ctrl+C)")
+        logger.info("🛑 Bot stopped")
     except Exception as e:
-        logger.error(f"❌ Failed to start bot: {e}")
+        logger.error(f"❌ Failed to start: {e}")
         raise
 
 
