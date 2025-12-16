@@ -80,7 +80,7 @@ class SamboBot:
             habit_map = {
                 1: ("Prayer", "Prayer with first water"),
                 2: ("Qi Gong", "Qi Gong routine"),
-                3: ("Ball", "Freestyling on the ball"),
+                3: ("Ball", "Ball freestyling"),
                 4: ("Run/Stretch", "20 minute run and stretch"),
                 5: ("Strength/Stretch", "Strengthening and stretching")
             }
@@ -105,7 +105,8 @@ class SamboBot:
                 return False, f"{habit_name} already recorded today"
             
             timestamp = now.strftime("%H:%M")
-            self.activity_sheet.update_cell(row_num, col_index, f"✓ ({timestamp})")
+            # Record just a checkmark (✓) - the cloud function counts any non-empty value
+            self.activity_sheet.update_cell(row_num, col_index, "✓")
             logger.info(f"✅ Recorded habit {habit_id} for user {user_id}")
             return True, f"✓ {habit_name} recorded at {timestamp}!"
         except Exception as e:
@@ -118,6 +119,7 @@ class SamboBot:
             for i, row in enumerate(all_data[1:], start=2):
                 if len(row) > 1 and str(row[0]) == str(user_id) and row[1] == date_str:
                     return i
+            # Create new row with proper structure
             new_row = [str(user_id), date_str, "", "", "", "", "", week_number, ""]
             self.activity_sheet.append_row(new_row)
             return len(all_data) + 1
@@ -130,48 +132,93 @@ class SamboBot:
             now = self.get_moscow_now()
             today_str = now.strftime("%Y-%m-%d")
             week_number = self.get_week_number(now)
+            
+            # Clean and parse input
             text = text.strip().lower()
             parts = text.split()
-            if not parts or parts[0][0] not in ['x', 'y', 'z']:
+            
+            if not parts:
                 return False, "Invalid format. Use: x, xx, xx 150, y 75, z"
-            habit_type = parts[0][0]
-            count = len(parts[0])
+            
+            first_part = parts[0]
+            
+            # Check if first character is valid
+            if not first_part or first_part[0] not in ['x', 'y', 'z']:
+                return False, "Invalid format. Start with x, y, or z"
+            
+            habit_type = first_part[0]
+            count = len(first_part)
+            
+            # Validate that all characters in first part are the same
+            if not all(c == habit_type for c in first_part):
+                return False, f"Invalid format. Use only '{habit_type}' characters (e.g., {habit_type}, {habit_type}{habit_type}, {habit_type}{habit_type}{habit_type})"
+            
+            # Parse cost if provided
             cost = 0
-            if len(parts) > 1 and parts[1].replace('.', '').isdigit():
-                cost = int(float(parts[1]))
+            if len(parts) > 1:
+                try:
+                    cost = int(float(parts[1]))
+                except (ValueError, IndexError):
+                    cost = 0
+            
             col_map = {
                 'x': {'count_col': 'Coffee (x)', 'cost_col': 'Coffee Cost', 'name': 'Coffee'},
                 'y': {'count_col': 'Sugary (y)', 'cost_col': 'Sugary Cost', 'name': 'Sugary drinks'},
                 'z': {'count_col': 'Flour (z)', 'cost_col': 'Flour Cost', 'name': 'Flour products'}
             }
-            if habit_type not in col_map:
-                return False, "Invalid type. Use x, y, or z"
+            
             config = col_map[habit_type]
             row_num = self.find_or_create_consumption_row(user_id, today_str, week_number)
             if not row_num:
                 return False, "Failed to create consumption row"
+            
             headers = self.consumption_sheet.row_values(1)
+            
+            # Find or create count column
             try:
                 count_col_index = headers.index(config['count_col']) + 1
             except ValueError:
                 self.consumption_sheet.update_cell(1, len(headers) + 1, config['count_col'])
                 count_col_index = len(headers) + 1
+                headers = self.consumption_sheet.row_values(1)  # Refresh headers
+            
+            # Find or create cost column
             try:
                 cost_col_index = headers.index(config['cost_col']) + 1
             except ValueError:
-                self.consumption_sheet.update_cell(1, len(headers) + 2, config['cost_col'])
-                cost_col_index = len(headers) + 2
-            current_count = self.consumption_sheet.cell(row_num, count_col_index).value
-            current_cost = self.consumption_sheet.cell(row_num, cost_col_index).value
-            new_count = int(current_count or 0) + count
-            new_cost = int(current_cost or 0) + cost
+                self.consumption_sheet.update_cell(1, len(headers) + 1, config['cost_col'])
+                cost_col_index = len(headers) + 1
+            
+            # Get current values
+            current_count_val = self.consumption_sheet.cell(row_num, count_col_index).value
+            current_cost_val = self.consumption_sheet.cell(row_num, cost_col_index).value
+            
+            # Calculate new values
+            try:
+                current_count = int(current_count_val) if current_count_val else 0
+            except (ValueError, TypeError):
+                current_count = 0
+                
+            try:
+                current_cost = int(current_cost_val) if current_cost_val else 0
+            except (ValueError, TypeError):
+                current_cost = 0
+            
+            new_count = current_count + count
+            new_cost = current_cost + cost
+            
+            # Update sheet
             self.consumption_sheet.update_cell(row_num, count_col_index, new_count)
-            self.consumption_sheet.update_cell(row_num, cost_col_index, new_cost)
+            if cost > 0:
+                self.consumption_sheet.update_cell(row_num, cost_col_index, new_cost)
+            
             logger.info(f"✅ Recorded consumption {habit_type} x{count} for user {user_id}")
             cost_text = f" ({cost} rub)" if cost > 0 else ""
             return True, f"✓ {config['name']} x{count} recorded{cost_text}! Total today: {new_count}"
         except Exception as e:
             logger.error(f"❌ Error recording consumption: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return False, "Error recording consumption"
 
     def find_or_create_consumption_row(self, user_id, date_str, week_number):
@@ -180,6 +227,7 @@ class SamboBot:
             for i, row in enumerate(all_data[1:], start=2):
                 if len(row) > 1 and str(row[0]) == str(user_id) and row[1] == date_str:
                     return i
+            # Create new row with zeros for numeric columns
             new_row = [str(user_id), date_str, 0, 0, 0, 0, 0, 0, week_number, ""]
             self.consumption_sheet.append_row(new_row)
             return len(all_data) + 1
@@ -192,32 +240,46 @@ class SamboBot:
             now = self.get_moscow_now()
             today_str = now.strftime("%Y-%m-%d")
             week_number = self.get_week_number(now)
+            
             lang_map = {
                 'ch': ('Chinese (ch)', 'Chinese'),
                 'he': ('Hebrew (he)', 'Hebrew'),
                 'ta': ('Tatar (ta)', 'Tatar')
             }
+            
             if lang_code not in lang_map:
                 return False, "Invalid language code. Use: ch, he, ta"
+            
             column_name, lang_name = lang_map[lang_code]
             row_num = self.find_or_create_language_row(user_id, today_str, week_number)
             if not row_num:
                 return False, "Failed to create language row"
+            
             headers = self.language_sheet.row_values(1)
             try:
                 col_index = headers.index(column_name) + 1
             except ValueError:
                 self.language_sheet.update_cell(1, len(headers) + 1, column_name)
                 col_index = len(headers) + 1
+            
+            # Get current value
             current_value = self.language_sheet.cell(row_num, col_index).value
-            current_sessions = int(current_value or 0)
+            try:
+                current_sessions = int(current_value) if current_value else 0
+            except (ValueError, TypeError):
+                current_sessions = 0
+            
             new_sessions = current_sessions + 1
             timestamp = now.strftime("%H:%M")
+            
+            # Update with integer count (cloud function expects integers)
             self.language_sheet.update_cell(row_num, col_index, new_sessions)
             logger.info(f"✅ Recorded language {lang_code} for user {user_id}")
             return True, f"✓ {lang_name} session #{new_sessions} recorded at {timestamp}!"
         except Exception as e:
             logger.error(f"❌ Error recording language: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return False, "Error recording language"
 
     def find_or_create_language_row(self, user_id, date_str, week_number):
@@ -226,6 +288,7 @@ class SamboBot:
             for i, row in enumerate(all_data[1:], start=2):
                 if len(row) > 1 and str(row[0]) == str(user_id) and row[1] == date_str:
                     return i
+            # Create new row with zeros for numeric columns
             new_row = [str(user_id), date_str, 0, 0, 0, week_number, ""]
             self.language_sheet.append_row(new_row)
             return len(all_data) + 1
@@ -274,12 +337,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     text = update.message.text.strip().lower()
     
+    # Check for language codes first
     if text in ['ch', 'he', 'ta']:
         success, message = bot.record_language(user_id, text)
         await update.message.reply_text(message)
         return
     
-    if text and text[0] in ['x', 'y', 'z']:
+    # Check for consumption tracking
+    if text and len(text) > 0 and text[0] in ['x', 'y', 'z']:
         success, message = bot.record_consumption(user_id, text)
         await update.message.reply_text(message)
         return
