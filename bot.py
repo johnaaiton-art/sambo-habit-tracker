@@ -91,7 +91,6 @@ class SamboBot:
             
             column_name, habit_name = habit_map[habit_id]
             
-            # DEBUG: Log what we're looking for
             logger.info(f"📝 Recording {habit_name} ({column_name}) for user {user_id} on {today_str}")
             
             # Find or create row for today
@@ -99,25 +98,16 @@ class SamboBot:
             if not row_num:
                 return False, "Failed to create activity row"
             
-            # Get headers to find correct column
+            # Get headers and create column mapping
             headers = self.activity_sheet.row_values(1)
-            logger.info(f"📊 Headers: {headers}")
+            col_index_map = {h.strip(): i for i, h in enumerate(headers, start=1)}
             
-            # Find the column index by searching for exact header match
-            col_index = None
-            for idx, header in enumerate(headers, start=1):
-                if header.strip() == column_name:
-                    col_index = idx
-                    logger.info(f"✓ Found column '{column_name}' at index {col_index}")
-                    break
+            # Find the column index
+            if column_name not in col_index_map:
+                return False, f"Column '{column_name}' not found in sheet. Please add it manually."
             
-            # If column doesn't exist, create it
-            if col_index is None:
-                logger.info(f"➕ Creating new column: {column_name}")
-                self.activity_sheet.update_cell(1, len(headers) + 1, column_name)
-                col_index = len(headers) + 1
-                headers = self.activity_sheet.row_values(1)  # Refresh
-            
+            col_index = col_index_map[column_name]
+            logger.info(f"✓ Found column '{column_name}' at index {col_index}")
             logger.info(f"📍 Writing to cell: Row {row_num}, Column {col_index}")
             
             # Check if already recorded
@@ -125,7 +115,7 @@ class SamboBot:
             if current_value and str(current_value).strip():
                 return False, f"{habit_name} already recorded today"
             
-            # Record simple checkmark - cloud function counts any non-empty value
+            # Record checkmark
             self.activity_sheet.update_cell(row_num, col_index, "✓")
             
             # Verify the update
@@ -145,36 +135,50 @@ class SamboBot:
         """Find existing row or create new one for activity tracking"""
         try:
             all_data = self.activity_sheet.get_all_values()
+            headers = self.activity_sheet.row_values(1)
+            
+            # Create column index mapping
+            col_index_map = {h.strip(): i for i, h in enumerate(headers)}
+            
+            # Validate required columns exist
+            required = ["User ID", "Date", "Week Number"]
+            missing = [col for col in required if col not in col_index_map]
+            if missing:
+                logger.error(f"Missing required columns: {missing}")
+                return None
             
             logger.info(f"🔍 Searching for user_id='{user_id}', date='{date_str}'")
             logger.info(f"📋 Total rows: {len(all_data)}")
             
+            # Convert inputs to strings and strip whitespace
+            user_id_str = str(user_id).strip()
+            date_str_clean = str(date_str).strip()
+            
             # Search for existing row (skip header at index 0)
             for i, row in enumerate(all_data[1:], start=2):
-                if len(row) >= 2:
-                    row_user = str(row[0]).strip() if row[0] else ""
-                    row_date = str(row[1]).strip() if row[1] else ""
-                    
-                    logger.info(f"   Row {i}: user='{row_user}', date='{row_date}'")
-                    
-                    if row_user == str(user_id).strip() and row_date == date_str:
-                        logger.info(f"🎯 Found existing row at {i}")
-                        return i
+                # Safely get values even if row is short
+                row_user = row[col_index_map["User ID"]] if len(row) > col_index_map["User ID"] else ""
+                row_date = row[col_index_map["Date"]] if len(row) > col_index_map["Date"] else ""
+                
+                row_user = str(row_user).strip()
+                row_date = str(row_date).strip()
+                
+                logger.info(f"   Row {i}: user='{row_user}', date='{row_date}'")
+                
+                if row_user == user_id_str and row_date == date_str_clean:
+                    logger.info(f"🎯 Found existing row at {i}")
+                    return i
             
-            # No existing row found - create new one
-            logger.info("📝 Creating new row...")
+            # No existing row found - create FULL new row (same width as headers)
+            logger.info(f"📝 Creating new activity row for {date_str}")
             
-            headers = self.activity_sheet.row_values(1)
-            new_row = [str(user_id), date_str]
+            new_row = [""] * len(headers)
+            new_row[col_index_map["User ID"]] = user_id_str
+            new_row[col_index_map["Date"]] = date_str_clean
+            new_row[col_index_map["Week Number"]] = week_number
             
-            # Fill empty values for all habit columns
-            for i in range(2, len(headers)):
-                if headers[i] == "Week Number":
-                    new_row.append(week_number)
-                elif headers[i] == "Goals":
-                    new_row.append("")
-                else:
-                    new_row.append("")  # Empty for habit columns
+            if "Goals" in col_index_map:
+                new_row[col_index_map["Goals"]] = ""
             
             logger.info(f"📤 Appending: {new_row}")
             self.activity_sheet.append_row(new_row)
