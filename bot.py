@@ -2,6 +2,7 @@ import os
 import json
 import datetime
 import logging
+import random
 import gspread
 from google.oauth2.service_account import Credentials
 from telegram import Update
@@ -34,7 +35,57 @@ class SamboBot:
         if not self.user_id:
             raise ValueError("TELEGRAM_USER_ID not set")
 
+        self.load_messages()
         self.init_sheets()
+
+    def load_messages(self):
+        """Load motivational messages from JSON file"""
+        try:
+            # Try to load from same directory as bot
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            messages_path = os.path.join(script_dir, "messages.json")
+            
+            # If not found, try current directory
+            if not os.path.exists(messages_path):
+                messages_path = "messages.json"
+            
+            with open(messages_path, "r", encoding="utf-8") as f:
+                self.messages = json.load(f)
+            
+            logger.info("✅ Motivational messages loaded successfully")
+        except Exception as e:
+            logger.error(f"❌ Failed to load messages.json: {e}")
+            # Fallback to empty messages
+            self.messages = {"coffee": [], "sugar_flour": []}
+
+    def get_random_message(self, category, count=None, total=None, item_name=None):
+        """Get a random motivational message in 3 languages
+        
+        Args:
+            category: 'coffee' or 'sugar_flour'
+            count: number of items just consumed
+            total: total count for today
+            item_name: name of the item (e.g., 'Coffee')
+        """
+        if category not in self.messages or not self.messages[category]:
+            return "✓ Recorded"
+        
+        message = random.choice(self.messages[category])
+        
+        # Build response with count info first, then insults
+        response_parts = []
+        
+        # Add count info if provided
+        if count and total and item_name:
+            response_parts.append(f"✓ {item_name} x{count} recorded. Total today: {total}")
+            response_parts.append("")  # Blank line separator
+        
+        # Add three-language insults (explicit order: English, Chinese, Spanish)
+        response_parts.append(message['english'])
+        response_parts.append(message['chinese'])
+        response_parts.append(message['spanish'])
+        
+        return "\n".join(response_parts)
 
     def init_sheets(self):
         """Initialize Google Sheets connection"""
@@ -190,9 +241,13 @@ class SamboBot:
                     cost = 0
 
             col_map = {
-                'x': {'count_col': 'Coffee (x)', 'cost_col': 'Coffee Cost', 'name': 'Coffee'},
-                'y': {'count_col': 'Sugary (y)', 'cost_col': 'Sugary Cost', 'name': 'Sugary drinks'},
-                'z': {'count_col': 'Flour (z)', 'cost_col': 'Flour Cost', 'name': 'Flour products'}
+                # IMPORTANT: 'category' must exactly match keys in messages.json
+                # Currently: 'coffee' and 'sugar_flour'
+                # To split sugar/flour insults, change to: 'sugar' and 'flour' 
+                # (and add separate "sugar" and "flour" lists in messages.json)
+                'x': {'count_col': 'Coffee (x)', 'cost_col': 'Coffee Cost', 'name': 'Coffee', 'category': 'coffee'},
+                'y': {'count_col': 'Sugary (y)', 'cost_col': 'Sugary Cost', 'name': 'Sugary drinks', 'category': 'sugar_flour'},
+                'z': {'count_col': 'Flour (z)', 'cost_col': 'Flour Cost', 'name': 'Flour products', 'category': 'sugar_flour'}
             }
 
             config = col_map[habit_type]
@@ -236,8 +291,15 @@ class SamboBot:
             if cost > 0:
                 self.consumption_sheet.update_cell(row_num, cost_col_index, new_cost)
 
-            cost_text = f" ({cost} rub)" if cost > 0 else ""
-            return True, f"✓ {config['name']} x{count} recorded{cost_text}! Total: {new_count}"
+            # Get motivational message with count info
+            motivational_msg = self.get_random_message(
+                config['category'], 
+                count=count, 
+                total=new_count, 
+                item_name=config['name']
+            )
+            
+            return True, motivational_msg
 
         except Exception as e:
             logger.error(f"❌ Error recording consumption: {e}")
