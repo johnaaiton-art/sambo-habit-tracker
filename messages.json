@@ -4,127 +4,148 @@
       "english": "☕💀 You're letting yourself down. How much longer are you gonna keep on the juice, you junkie?",
       "chinese": "☕💀 你在让自己失望。你这个瘾君子还要喝多久？",
       "spanish": "☕💀 Te estás decepcionando a ti mismo. ¿Cuánto tiempo más vas a seguir con el jugo, drogadicto?",
-      "id": 1
+      "id": 1,
+      "picture": "coffee_01.jpg"
     },
     {
       "english": "☕⚰️ Another cup, another nail in your coffin. Your heart's gonna explode by 55.",
       "chinese": "☕⚰️ 又一杯，又一颗钉子钉在你的棺材上。你的心脏会在55岁时爆炸。",
       "spanish": "☕⚰️ Otra taza, otro clavo en tu ataúd. Tu corazón va a explotar a los 55.",
-      "id": 2
+      "id": 2,
+      "picture": "coffee_02.jpg"
     },
     {
       "english": "☕😢 Weak. You can't even go a day without your precious caffeine fix.",
       "chinese": "☕😢 软弱。你甚至一天都离不开你珍贵的咖啡因。",
       "spanish": "☕😢 Débil. Ni siquiera puedes pasar un día sin tu preciosa dosis de cafeína.",
-      "id": 3
+      "id": 3,
+      "picture": "coffee_03.jpg"
     },
     {
       "english": "☕🫘💔 Your kidneys are crying. They'll give out before you're 60, keep it up.",
       "chinese": "☕🫘💔 你的肾脏在哭泣。它们会在你60岁之前衰竭，继续吧。",
       "spanish": "☕🫘💔 Tus riñones están llorando. Se rendirán antes de que cumplas 60, sigue así.",
-      "id": 4
+      "id": 4,
+      "picture": "coffee_04.jpg"
     },
     {
       "english": "☕🤡 Pathetic. Can't function without your liquid crutch, can you?",
       "chinese": "☕🤡 可悲。没有你的液体拐杖就无法运作，对吧？",
       "spanish": "☕🤡 Patético. No puedes funcionar sin tu muleta líquida, ¿verdad?",
-      "id": 5
+      "id": 5,
+      "picture": "coffee_05.jpg"
     },
     {
       "english": "☕🔥 Keep poisoning yourself. Your adrenal glands will be burnt out by 50.",
       "chinese": "☕🔥 继续毒害自己吧。你的肾上腺会在50岁时耗尽。",
       "spanish": "☕🔥 Sigue envenenándote. Tus glándulas suprarrenales estarán agotadas a los 50.",
-      "id": 6
+      "id": 6,
+      "picture": "coffee_06.jpg"
     },
     {
       "english": "☕🧠💥 No self-control. Your nervous system is screaming for mercy.",
       "chinese": "☕🧠💥 没有自制力。你的神经系统在尖叫着求饶。",
       "spanish": "☕🧠💥 Sin autocontrol. Tu sistema nervioso está gritando pidiendo misericordia.",
-      "id": 7
+      "id": 7,
+      "picture": "coffee_07.jpg"
     },
     {
       "english": "☕😰 Another hit for the addict. Enjoy your anxiety and insomnia later.",
       "chinese": "☕😰 瘾君子又来一剂。享受你以后的焦虑和失眠吧。",
       "spanish": "☕😰 Otra dosis para el adicto. Disfruta tu ansiedad e insomnio después.",
-      "id": 8
+      "id": 8,
+      "picture": "coffee_08.jpg"
     },
     {
       "english": "☕⛓️ You're a slave to the bean. Your bones will be brittle by 65.",
       "chinese": "☕⛓️ 你是咖啡豆的奴隶。你的骨头会在65岁时变脆。",
       "spanish": "☕⛓️ Eres esclavo del grano. Tus huesos estarán frágiles a los 65.",
-      "id": 9
+      "id": 9,
+      "picture": "coffee_09.jpg"
     },
     {
       "english": "☕🤢 Disappointing. Your digestive system is already wrecked, why not finish the job?",
       "chinese": "☕🤢 令人失望。你的消化系统已经被毁了，为什么不完成这项工作呢？",
       "spanish": "☕🤢 Decepcionante. Tu sistema digestivo ya está destrozado, ¿por qué no terminar el trabajo?",
-      "id": 10
+      "id": 10,
+      "picture": "coffee_10.jpg"
     },
     {
       "english": "☕💉 Zero discipline. Your blood pressure thanks you for the future stroke.",
       "chinese": "☕💉 零纪律。你的血压感谢你未来的中风。",
       "spanish": "☕💉 Cero disciplina. Tu presión arterial te agradece el futuro derrame cerebral.",
-      "id": 11
+      "id": 11,
+      "picture": "coffee_11.jpg"
     },
     {
       "english": "☕🦷 Weak-willed fool. Your teeth will rot and your stomach will ulcerate.",
       "chinese": "☕🦷 意志薄弱的傻瓜。你的牙齿会腐烂，你的胃会溃疡。",
       "spanish": "☕🦷 Tonto de voluntad débil. Tus dientes se pudrirán y tu estómago se ulcerará.",
-      "id": 12
+      "id": 12,
+      "picture": "coffee_12.jpg"
     },
     {
       "english": "☕🍺 Can't resist, can you? Your liver is working overtime to filter this poison.",
       "chinese": "☕🍺 你无法抗拒，对吧？你的肝脏正在加班过滤这种毒药。",
       "spanish": "☕🍺 No puedes resistir, ¿verdad? Tu hígado está trabajando horas extras para filtrar este veneno.",
-      "id": 13
+      "id": 13,
+      "picture": "coffee_13.jpg"
     },
     {
       "english": "☕❤️‍🩹 Addicted and proud of it. Your cardiovascular system will collapse by 60.",
       "chinese": "☕❤️‍🩹 上瘾而自豪。你的心血管系统会在60岁时崩溃。",
       "spanish": "☕❤️‍🩹 Adicto y orgulloso de ello. Tu sistema cardiovascular colapsará a los 60.",
-      "id": 14
+      "id": 14,
+      "picture": "coffee_14.jpg"
     },
     {
       "english": "☕💓 Another failure of willpower. Enjoy the heart palpitations at night.",
       "chinese": "☕💓 又一次意志力的失败。享受晚上的心悸吧。",
       "spanish": "☕💓 Otro fracaso de fuerza de voluntad. Disfruta las palpitaciones del corazón por la noche.",
-      "id": 15
+      "id": 15,
+      "picture": "coffee_15.jpg"
     },
     {
       "english": "☕🦴 You're destroying yourself one cup at a time. Osteoporosis is waiting for you.",
       "chinese": "☕🦴 你在一杯一杯地毁灭自己。骨质疏松症在等着你。",
       "spanish": "☕🦴 Te estás destruyendo una taza a la vez. La osteoporosis te está esperando.",
-      "id": 16
+      "id": 16,
+      "picture": "coffee_16.jpg"
     },
     {
       "english": "☕🐛 Spineless. Your body is begging you to stop but you won't listen.",
       "chinese": "☕🐛 没骨气。你的身体在乞求你停止，但你不听。",
       "spanish": "☕🐛 Sin columna vertebral. Tu cuerpo te ruega que pares pero no escuchas.",
-      "id": 17
+      "id": 17,
+      "picture": "coffee_17.jpg"
     },
     {
       "english": "☕🧪 The caffeine owns you. Your brain chemistry is permanently altered.",
       "chinese": "☕🧪 咖啡因控制了你。你的大脑化学反应已经永久改变。",
       "spanish": "☕🧪 La cafeína te posee. La química de tu cerebro está permanentemente alterada.",
-      "id": 18
+      "id": 18,
+      "picture": "coffee_18.jpg"
     },
     {
       "english": "☕🦠 Gutless wonder. Your immune system is compromised and you don't even care.",
       "chinese": "☕🦠 胆小鬼。你的免疫系统受损了，你甚至不在乎。",
       "spanish": "☕🦠 Maravilla sin agallas. Tu sistema inmunológico está comprometido y ni siquiera te importa.",
-      "id": 19
+      "id": 19,
+      "picture": "coffee_19.jpg"
     },
     {
       "english": "☕😂 You're a joke. Keep it up and you'll be on blood pressure meds by 45.",
       "chinese": "☕😂 你是个笑话。继续下去，你会在45岁时服用降压药。",
       "spanish": "☕😂 Eres una broma. Sigue así y estarás tomando medicamentos para la presión arterial a los 45.",
-      "id": 20
+      "id": 20,
+      "picture": "coffee_20.jpg"
     },
     {
       "english": "☕🏜️ No backbone. Your dehydration and mineral depletion are accelerating aging.",
       "chinese": "☕🏜️ 没有骨气。你的脱水和矿物质流失正在加速衰老。",
       "spanish": "☕🏜️ Sin columna vertebral. Tu deshidratación y depleción de minerales están acelerando el envejecimiento.",
-      "id": 21
+      "id": 21,
+      "picture": "coffee_21.jpg"
     }
   ],
   "sugar_flour": [
@@ -132,127 +153,148 @@
       "english": "🍩🐷 Another step toward obesity. Your joints are screaming already.",
       "chinese": "🍩🐷 又向肥胖迈进一步。你的关节已经在尖叫了。",
       "spanish": "🍩🐷 Otro paso hacia la obesidad. Tus articulaciones ya están gritando.",
-      "id": 1
+      "id": 1,
+      "picture": "sugar_flour_01.jpg"
     },
     {
       "english": "🍰💉 Keep eating like a pig. Diabetes is coming for you by 50.",
       "chinese": "🍰💉 继续像猪一样吃吧。糖尿病会在50岁时找上你。",
       "spanish": "🍰💉 Sigue comiendo como un cerdo. La diabetes viene por ti a los 50.",
-      "id": 2
+      "id": 2,
+      "picture": "sugar_flour_02.jpg"
     },
     {
       "english": "🧁📈 You're getting fatter by the minute. Can't even see your feet anymore?",
       "chinese": "🧁📈 你每分钟都在变胖。连自己的脚都看不见了吧？",
       "spanish": "🧁📈 Te estás poniendo más gordo por minuto. ¿Ya no puedes ver tus pies?",
-      "id": 3
+      "id": 3,
+      "picture": "sugar_flour_03.jpg"
     },
     {
       "english": "🍪🤰 Look at you, growing that belly. Pregnancy or just pure gluttony?",
       "chinese": "🍪🤰 看看你，肚子越来越大。是怀孕还是纯粹的暴食？",
       "spanish": "🍪🤰 Mírate, creciendo esa barriga. ¿Embarazo o pura glotonería?",
-      "id": 4
+      "id": 4,
+      "picture": "sugar_flour_04.jpg"
     },
     {
       "english": "🍞💔 Weak fool. Your heart is drowning in fat as we speak.",
       "chinese": "🍞💔 软弱的傻瓜。你的心脏正在被脂肪淹没。",
       "spanish": "🍞💔 Tonto débil. Tu corazón se está ahogando en grasa mientras hablamos.",
-      "id": 5
+      "id": 5,
+      "picture": "sugar_flour_05.jpg"
     },
     {
       "english": "🥐⚖️ No self-control. The scale doesn't lie, fatty.",
       "chinese": "🥐⚖️ 没有自制力。体重秤不会说谎，胖子。",
       "spanish": "🥐⚖️ Sin autocontrol. La báscula no miente, gordito.",
-      "id": 6
+      "id": 6,
+      "picture": "sugar_flour_06.jpg"
     },
     {
       "english": "🍩🦴 Your knees will give out by 55. Too much weight for those poor joints.",
       "chinese": "🍩🦴 你的膝盖会在55岁时垮掉。这些可怜的关节承受不了这么多重量。",
       "spanish": "🍩🦴 Tus rodillas cederán a los 55. Demasiado peso para esas pobres articulaciones.",
-      "id": 7
+      "id": 7,
+      "picture": "sugar_flour_07.jpg"
     },
     {
       "english": "🎂😴 Enjoy your sleep apnea and constant fatigue, you glutton.",
       "chinese": "🎂😴 享受你的睡眠呼吸暂停和持续疲劳吧，暴食者。",
       "spanish": "🎂😴 Disfruta tu apnea del sueño y fatiga constante, glotón.",
-      "id": 8
+      "id": 8,
+      "picture": "sugar_flour_08.jpg"
     },
     {
       "english": "🥨🩸 Your blood is basically syrup now. Metabolic syndrome incoming.",
       "chinese": "🥨🩸 你的血液现在基本上是糖浆了。代谢综合症即将来临。",
       "spanish": "🥨🩸 Tu sangre es básicamente jarabe ahora. Síndrome metabólico en camino.",
-      "id": 9
+      "id": 9,
+      "picture": "sugar_flour_09.jpg"
     },
     {
       "english": "🍰🧠 Rotting your brain with sugar. Alzheimer's says hello!",
       "chinese": "🍰🧠 用糖腐蚀你的大脑。阿尔茨海默症向你问好！",
       "spanish": "🍰🧠 Pudriendo tu cerebro con azúcar. ¡El Alzheimer te saluda!",
-      "id": 10
+      "id": 10,
+      "picture": "sugar_flour_10.jpg"
     },
     {
       "english": "🍪🔥 Inflammation city. Your whole body is literally on fire.",
       "chinese": "🍪🔥 炎症之城。你的整个身体实际上在燃烧。",
       "spanish": "🍪🔥 Ciudad de inflamación. Todo tu cuerpo está literalmente en llamas.",
-      "id": 11
+      "id": 11,
+      "picture": "sugar_flour_11.jpg"
     },
     {
       "english": "🥖🐌 So slow and sluggish. That's what happens when you're obese.",
       "chinese": "🥖🐌 如此缓慢和迟钝。这就是肥胖的后果。",
       "spanish": "🥖🐌 Tan lento y perezoso. Eso es lo que pasa cuando eres obeso.",
-      "id": 12
+      "id": 12,
+      "picture": "sugar_flour_12.jpg"
     },
     {
       "english": "🧁🦷 Your teeth are rotting. Dentist bills incoming, sugar addict.",
       "chinese": "🧁🦷 你的牙齿在腐烂。牙医账单即将到来，糖瘾者。",
       "spanish": "🧁🦷 Tus dientes se están pudriendo. Facturas del dentista en camino, adicto al azúcar.",
-      "id": 13
+      "id": 13,
+      "picture": "sugar_flour_13.jpg"
     },
     {
       "english": "🍩🚫 Can't stop, won't stop. You're a slave to your cravings, whale.",
       "chinese": "🍩🚫 停不下来，不会停止。你是你渴望的奴隶，鲸鱼。",
       "spanish": "🍩🚫 No puedes parar, no vas a parar. Eres esclavo de tus antojos, ballena.",
-      "id": 14
+      "id": 14,
+      "picture": "sugar_flour_14.jpg"
     },
     {
       "english": "🍞🤢 Disgusting. Your liver is begging for mercy from all this junk.",
       "chinese": "🍞🤢 恶心。你的肝脏在乞求从所有这些垃圾中获得怜悯。",
       "spanish": "🍞🤢 Repugnante. Tu hígado está rogando por misericordia de toda esta basura.",
-      "id": 15
+      "id": 15,
+      "picture": "sugar_flour_15.jpg"
     },
     {
       "english": "🥐💀 Each bite brings you closer to an early grave. Worth it?",
       "chinese": "🥐💀 每一口都让你离早逝更近。值得吗？",
       "spanish": "🥐💀 Cada bocado te acerca a una tumba temprana. ¿Vale la pena?",
-      "id": 16
+      "id": 16,
+      "picture": "sugar_flour_16.jpg"
     },
     {
       "english": "🎂🫃 That's not a dad bod, that's just obesity. Face the truth.",
       "chinese": "🎂🫃 那不是老爸身材，那只是肥胖。面对现实吧。",
       "spanish": "🎂🫃 Eso no es cuerpo de papá, eso es solo obesidad. Enfrenta la verdad.",
-      "id": 17
+      "id": 17,
+      "picture": "sugar_flour_17.jpg"
     },
     {
       "english": "🍪👴 Aging like milk. Sugar ages you faster than the sun.",
       "chinese": "🍪👴 像牛奶一样老化。糖让你比太阳还快地老化。",
       "spanish": "🍪👴 Envejeciendo como la leche. El azúcar te envejece más rápido que el sol.",
-      "id": 18
+      "id": 18,
+      "picture": "sugar_flour_18.jpg"
     },
     {
       "english": "🥨🧟 You're basically a walking corpse. Energy crashed again?",
       "chinese": "🥨🧟 你基本上是一具行尸走肉。能量又崩溃了？",
       "spanish": "🥨🧟 Básicamente eres un cadáver ambulante. ¿La energía se desplomó otra vez?",
-      "id": 19
+      "id": 19,
+      "picture": "sugar_flour_19.jpg"
     },
     {
       "english": "🍰😭 Pathetic self-sabotage. You know better but you do it anyway.",
       "chinese": "🍰😭 可悲的自我破坏。你明明知道但还是这样做。",
       "spanish": "🍰😭 Autosabotaje patético. Sabes mejor pero lo haces de todos modos.",
-      "id": 20
+      "id": 20,
+      "picture": "sugar_flour_20.jpg"
     },
     {
       "english": "🍩🏋️ Too fat to move properly. Your workout is just existing at this point.",
       "chinese": "🍩🏋️ 太胖了动不了。你的锻炼现在只是存在而已。",
       "spanish": "🍩🏋️ Demasiado gordo para moverte bien. Tu entrenamiento es solo existir en este punto.",
-      "id": 21
+      "id": 21,
+      "picture": "sugar_flour_21.jpg"
     }
   ]
 }

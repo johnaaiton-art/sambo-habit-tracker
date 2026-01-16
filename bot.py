@@ -59,16 +59,19 @@ class SamboBot:
             self.messages = {"coffee": [], "sugar_flour": []}
 
     def get_random_message(self, category, count=None, total=None, item_name=None):
-        """Get a random motivational message in 3 languages
+        """Get a random motivational message with image filename
         
         Args:
             category: 'coffee' or 'sugar_flour'
             count: number of items just consumed
             total: total count for today
             item_name: name of the item (e.g., 'Coffee')
+            
+        Returns:
+            tuple: (text_message, image_filename)
         """
         if category not in self.messages or not self.messages[category]:
-            return "✓ Recorded"
+            return "✓ Recorded", None
         
         message = random.choice(self.messages[category])
         
@@ -85,7 +88,10 @@ class SamboBot:
         response_parts.append(message['chinese'])
         response_parts.append(message['spanish'])
         
-        return "\n".join(response_parts)
+        text = "\n".join(response_parts)
+        image_filename = message.get('picture')  # Get image filename if it exists
+        
+        return text, image_filename
 
     def init_sheets(self):
         """Initialize Google Sheets connection"""
@@ -221,17 +227,17 @@ class SamboBot:
             parts = text.split()
 
             if not parts:
-                return False, "Invalid format. Use: x, xx, xxx, y, z"
+                return False, "Invalid format. Use: x, xx, xxx, y, z", None
 
             first_part = parts[0]
             if not first_part or first_part[0] not in ['x', 'y', 'z']:
-                return False, "Start with x, y, or z"
+                return False, "Start with x, y, or z", None
 
             habit_type = first_part[0]
             count = len(first_part)
 
             if not all(c == habit_type for c in first_part):
-                return False, f"Use only '{habit_type}' characters"
+                return False, f"Use only '{habit_type}' characters", None
 
             cost = 0
             if len(parts) > 1:
@@ -241,10 +247,6 @@ class SamboBot:
                     cost = 0
 
             col_map = {
-                # IMPORTANT: 'category' must exactly match keys in messages.json
-                # Currently: 'coffee' and 'sugar_flour'
-                # To split sugar/flour insults, change to: 'sugar' and 'flour' 
-                # (and add separate "sugar" and "flour" lists in messages.json)
                 'x': {'count_col': 'Coffee (x)', 'cost_col': 'Coffee Cost', 'name': 'Coffee', 'category': 'coffee'},
                 'y': {'count_col': 'Sugary (y)', 'cost_col': 'Sugary Cost', 'name': 'Sugary drinks', 'category': 'sugar_flour'},
                 'z': {'count_col': 'Flour (z)', 'cost_col': 'Flour Cost', 'name': 'Flour products', 'category': 'sugar_flour'}
@@ -254,7 +256,7 @@ class SamboBot:
 
             row_num = self.find_or_create_consumption_row(user_id, today_str, week_number)
             if not row_num:
-                return False, "Failed to create consumption row"
+                return False, "Failed to create consumption row", None
 
             headers = self.consumption_sheet.row_values(1)
 
@@ -291,21 +293,21 @@ class SamboBot:
             if cost > 0:
                 self.consumption_sheet.update_cell(row_num, cost_col_index, new_cost)
 
-            # Get motivational message with count info
-            motivational_msg = self.get_random_message(
+            # Get motivational message with image filename
+            motivational_msg, image_filename = self.get_random_message(
                 config['category'], 
                 count=count, 
                 total=new_count, 
                 item_name=config['name']
             )
             
-            return True, motivational_msg
+            return True, motivational_msg, image_filename
 
         except Exception as e:
             logger.error(f"❌ Error recording consumption: {e}")
             import traceback
             logger.error(traceback.format_exc())
-            return False, "Error recording consumption"
+            return False, "Error recording consumption", None
 
     def find_or_create_consumption_row(self, user_id, date_str, week_number):
         try:
@@ -470,7 +472,29 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if text and text[0] in ['x', 'y', 'z']:
-        success, message = bot.record_consumption(user_id, text)
+        success, message, image_filename = bot.record_consumption(user_id, text)
+        
+        # Send image first if available
+        if success and image_filename:
+            try:
+                # Try to find image in images folder
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                image_path = os.path.join(script_dir, "images", image_filename)
+                
+                # If not found, try current directory
+                if not os.path.exists(image_path):
+                    image_path = os.path.join(script_dir, image_filename)
+                
+                if os.path.exists(image_path):
+                    with open(image_path, 'rb') as image_file:
+                        await update.message.reply_photo(photo=image_file)
+                    logger.info(f"✅ Sent image: {image_filename}")
+                else:
+                    logger.warning(f"⚠️ Image not found: {image_path}")
+            except Exception as e:
+                logger.error(f"❌ Error sending image: {e}")
+        
+        # Send text message
         await update.message.reply_text(message)
         return
 
